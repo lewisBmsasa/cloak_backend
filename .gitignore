@@ -1,0 +1,8 @@
+dist/
+build/
+redacted_files
+logs.txt
+ollama/
+build/
+fast_server/
+models/

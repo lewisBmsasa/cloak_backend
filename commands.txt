@@ -1,0 +1,58 @@
+pyinstaller --add-binary "./ollama:." --add-data "./models:models" --onedir fast_server.py
+cd dist/fast_server
+echo '#!/bin/bash' > run.sh
+echo './fast_server "$@"' >> run.sh
+chmod +x run.sh
+
+echo '#!/bin/bash' > run.sh
+echo 'DIR=$(dirname "$(realpath "$0")")' >> run.sh
+echo '"$DIR/fast_server" "$@"' >> run.sh
+
+echo '#!/bin/bash' > run.sh
+echo 'DIR=$(dirname "$(realpath "$0")")' >> run.sh
+echo 'export LD_LIBRARY_PATH="$DIR/_internal:$LD_LIBRARY_PATH"' >> run.sh
+echo '"$DIR/fast_server" "$@"' >> run.sh
+
+echo '#!/bin/bash' > run.sh
+echo 'DIR=$(dirname "$(realpath "$0")")' >> run.sh
+echo 'export LD_LIBRARY_PATH="$DIR/_internal:$LD_LIBRARY_PATH"' >> run.sh
+echo 'export PYTHONPATH="$DIR/_internal:$PYTHONPATH"' >> run.sh  
+echo '"$DIR/fast_server" "$@" --pyi-no-tmpdir' >> run.sh  
+
+
+echo '#!/bin/bash' > run.sh
+echo 'DIR=$(dirname "$(realpath "$0")")' >> run.sh
+echo 'if [ ! -f "$DIR/fast_server" ]; then' >> run.sh
+echo '  echo "First run: extracting..."' >> run.sh
+echo '  cd .. && makeself --notemp cloak_server/ cloak_server-linux "Cloak LLM Server" ./cloak_server/run.sh' >> run.sh
+echo 'fi' >> run.sh
+echo '"$DIR/fast_server" "$@"' >> run.sh
+
+
+cd ..
+makeself --notemp cloak_server/ cloak_server-linux "Cloak LLM Server" ./run.sh
+
+makeself --notemp fast_server/ fast_server.bin "Local LLM Server" ./fast_server/run.sh
+
+
+
+
+OPTION 2 - ONE FILE 
+
+pyinstaller server.spec
+
+cd dist
+mkdir cloak_server
+mv fast_server cloak_server/
+cp -r ../models cloak_server/  # Copy tinyllama model
+mkdir -p cloak_server/bin
+cp ../ollama/bin/ollama cloak_server/bin/ollama  # Adjust path to your ollama executable
+cd cloak_server
+
+echo '#!/bin/bash' > run.sh
+echo 'DIR=$(dirname "$(realpath "$0")")' >> run.sh
+echo '"$DIR/fast_server" "$@"' >> run.sh
+chmod +x run.sh
+
+cd ..
+makeself --notemp cloak_server/ cloak_server-linux "Cloak LLM Server" ./run.sh
