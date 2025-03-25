@@ -1,0 +1,45 @@
+mkdir -p dmg-staging
+cp dist/server-macos.bin dmg-staging/
+
+echo "Double-click server-macos.bin to run the Cloak LLM server." > dmg-staging/README.txt
+
+
+mkdir -p dmg-staging/Server.app/Contents/MacOS
+cp dist/server-macos.bin dmg-staging/Server.app/Contents/MacOS/Server
+chmod +x dmg-staging/Server.app/Contents/MacOS/Server
+
+
+cat <<EOF > dmg-staging/Server.app/Contents/Info.plist
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>Server</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.example.llmserver</string>
+    <key>CFBundleName</key>
+    <string>Server</string>
+</dict>
+</plist>
+EOF
+
+du -sh dmg-staging/
+
+
+hdiutil create -volname "Cloak LLM Server" -srcfolder dmg-staging/ -ov -size 1500m -format UDRW cloak-llm-server.dmg
+
+
+hdiutil attach cloak-llm-server.dmg
+
+
+mkdir dmg-staging/.background
+cp some-image.png dmg-staging/.background/
+
+
+osascript -e 'tell application "Finder" to set desktop picture of disk "Local LLM Server" to POSIX file "/Volumes/Local LLM Server/.background/some-image.png"'
+
+
+hdiutil detach /Volumes/"Local LLM Server"
+hdiutil convert local-llm-server.dmg -format UDZO -o local-llm-server-final.dmg
+

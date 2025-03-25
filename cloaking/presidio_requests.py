@@ -1,8 +1,7 @@
 import requests
 from faker import Faker
 from pdf2image import convert_from_path
-from PIL import Image, ImageDraw
-import pytesseract
+from PIL import Image
 import io
 import base64
 

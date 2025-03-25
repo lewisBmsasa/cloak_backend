@@ -4,13 +4,13 @@
 a = Analysis(
     ['fast_server.py'],
     pathex=[],
-    binaries=[('./ollama', 'bin'), ('/home/lewis-chase/.conda/envs/cloak/lib/libpython3.10.so.1.0', '.')],
-    datas=[('./models', 'models'), ('/home/lewis-chase/.conda/envs/cloak/lib/python3.10/site-packages/ollama', 'ollama'), ('/home/lewis-chase/.conda/envs/cloak/lib/python3.10/site-packages/spacy', 'spacy'), ('/home/lewis-chase/.conda/envs/cloak/lib/python3.10/site-packages/presidio_analyzer', 'presidio_analyzer'), ('/home/lewis-chase/.conda/envs/cloak/lib/python3.10/site-packages/presidio_anonymizer', 'presidio_anonymizer'), ('/home/lewis-chase/.conda/envs/cloak/lib/python3.10/site-packages/presidio_structured', 'presidio_structured'), ('/home/lewis-chase/.conda/envs/cloak/lib/python3.10/site-packages/presidio_image_redactor', 'presidio_image_redactor'), ('/home/lewis-chase/.conda/envs/cloak/lib/python3.10/site-packages/en_core_web_sm', 'en_core_web_sm')],
+    binaries=[('./ollama', 'bin')],
+    datas=[('./models', 'models'), ('/opt/anaconda3/envs/privacy/lib/python3.10/site-packages/ollama', 'ollama'), ('/opt/anaconda3/envs/privacy/lib/python3.10/site-packages/spacy', 'spacy'), ('/opt/anaconda3/envs/privacy/lib/python3.10/site-packages/presidio_analyzer', 'presidio_analyzer'), ('/opt/anaconda3/envs/privacy/lib/python3.10/site-packages/presidio_anonymizer', 'presidio_anonymizer'), ('/opt/anaconda3/envs/privacy/lib/python3.10/site-packages/presidio_structured', 'presidio_structured'), ('/opt/anaconda3/envs/privacy/lib/python3.10/site-packages/presidio_image_redactor', 'presidio_image_redactor'), ('/opt/anaconda3/envs/privacy/lib/python3.10/site-packages/en_core_web_sm', 'en_core_web_sm')],
     hiddenimports=['ollama', 'ollama._client', 'spacy', 'presidio_analyzer', 'spacy.lang.en', 'spacy.pipeline', 'en_core_web_sm'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['torch', 'transformers'],
+    excludes=[],
     noarchive=False,
     optimize=0,
 )

@@ -1,21 +1,16 @@
 from presidio_analyzer import AnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine
 from PIL import Image
-import pydicom
-from faker import Faker
 from pdf2image import convert_from_path
-from PIL import Image, ImageDraw
-import img2pdf
-import pytesseract
+from PIL import Image
 import os
 import base64
 from presidio_analyzer import AnalyzerEngine, BatchAnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine, BatchAnonymizerEngine
-from presidio_analyzer import Pattern, PatternRecognizer
-from presidio_image_redactor import ImageRedactorEngine, DicomImageRedactorEngine, ImageAnalyzerEngine
-import spacy
+from presidio_image_redactor import ImageRedactorEngine, ImageAnalyzerEngine
+
 import en_core_web_sm
-from presidio_analyzer.nlp_engine import NlpEngine, SpacyNlpEngine
+from presidio_analyzer.nlp_engine import  SpacyNlpEngine
 
 nlp = en_core_web_sm.load()
 nlp_config = {"nlp_engine_name": "spacy", "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}]}
@@ -61,31 +56,7 @@ def redact_images(image_paths, redacted_dir="redacted_images"):
         redacted_image.save(redacted_image_path)
         redacted_image_paths.append(redacted_image_path)
     return redacted_image_paths
-def images_to_pdf(image_paths, output_pdf_path):
-    with open(output_pdf_path, "wb") as f:
-        print("outro", output_pdf_path)
-        f.write(img2pdf.convert(image_paths))
-        print("done")
 
-async def anonymize_pdf_2(pdf_path, output_pdf_path):
-    # Convert PDF to images
-    image_paths = pdf_to_images(pdf_path)
-    print(f"Converted PDF to {len(image_paths)} images.")
-
-    # Redact sensitive information
-    redacted_image_paths = redact_images(image_paths)
-    print(f"Redacted {len(redacted_image_paths)} images.")
-
-    # Convert back to PDF
-    images_to_pdf(redacted_image_paths, output_pdf_path)
-    print(f"Saved redacted PDF to {output_pdf_path}")
-
-    # Optional: Clean up temporary files
-    for path in image_paths + redacted_image_paths:
-        os.remove(path)
-    os.rmdir("temp_images")
-    os.rmdir("redacted_images")
-    return output_pdf_path
 
 def anonymize_pdf(filepath, output_path,fill=(0,0,0)):
      # Convert PDF to images

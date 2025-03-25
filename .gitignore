@@ -1,8 +1,10 @@
 dist/
 build/
-redacted_files
+redacted_files/
 logs.txt
 ollama/
 build/
 fast_server/
 models/
+dmg-staging/
+cloak-llm-server.dmg
