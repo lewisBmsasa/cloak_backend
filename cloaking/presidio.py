@@ -5,6 +5,8 @@ from pdf2image import convert_from_path
 from PIL import Image
 import os
 import base64
+import json
+import pytesseract
 from presidio_analyzer import AnalyzerEngine, BatchAnalyzerEngine
 from presidio_anonymizer import AnonymizerEngine, BatchAnonymizerEngine
 from presidio_image_redactor import ImageRedactorEngine, ImageAnalyzerEngine
@@ -58,19 +60,47 @@ def redact_images(image_paths, redacted_dir="redacted_images"):
     return redacted_image_paths
 
 
+def analyze_image_and_show_results(image):
+   
+    extracted_text = pytesseract.image_to_string(image)
+    print("Extracted Text:")
+    print(extracted_text)
+    print("\nAnalyzed Results (Sensitive Information to be Redacted):")
+    analysis_results = analyzer.analyze(text=extracted_text, language="en")
+    
+    # Display the detected entities
+    analysis_json = []
+    if analysis_results:
+        for result in analysis_results:
+            entity_text = extracted_text[result.start:result.end]
+            print(f"- Type: {result.entity_type}, Value: '{entity_text}', Position: {result.start}-{result.end}, Confidence: {result.score:.2f}")
+            json_data = {
+                "entity_type":result.entity_type,
+                "value": entity_text,
+                "position": {"start": int(result.start), "end": int(result.end)},
+                "confidence": float(result.score)
+            }
+            analysis_json.append(json_data)
+    else:
+        return None
+    
+    return analysis_json
 def anonymize_pdf(filepath, output_path,fill=(0,0,0)):
      # Convert PDF to images
      
     images = convert_from_path(filepath)
     
     redacted_images = []
+    analyzed_results = []
     for i, image in enumerate(images):
+        analysis = analyze_image_and_show_results(image)
         redacted_image = image_engine.redact(image,fill=fill)
         redacted_images.append(redacted_image)
+        if analysis:
+           analyzed_results.append(analysis)
     
     if redacted_images:
         try:
-            print("within", output_path)
             #os.makedirs(os.path.dirname(output_path), exist_ok=True)
             redacted_images[0].save(
                     output_path,
@@ -81,7 +111,7 @@ def anonymize_pdf(filepath, output_path,fill=(0,0,0)):
             print(f"Successfully saved to {output_path}")
         except Exception as e:
             print("no file output",e)
-    return output_path
+    return output_path, analyzed_results
      
 
 
