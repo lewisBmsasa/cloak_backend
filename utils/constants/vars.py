@@ -26,11 +26,11 @@ system_prompts = {
     For the given message that a user sends to a chatbot, identify all the personally identifiable information using the above taxonomy only, and the entity_type should be selected from the all-caps categories.
     Note that the information should be related to a real person not in a public context, but okay if not uniquely identifiable.
     Result should be in its minimum possible unit.
-    Return me ONLY a json in the following format. Results should be an array of all PII you have identified. It should be a valid json: {"results": [{"entity_type": YOU_DECIDE_THE_PII_TYPE, "text": PART_OF_MESSAGE_YOU_IDENTIFIED_AS_PII, "position_start": POSITION_OF_THE_TEXT_IN_THE_SENTENCE_INCLUDING_SPACES_START,"position_end": POSITION_OF_THE_TEXT_IN_THE_SENTENCE_INCLUDING_SPACES_END]}''',
+    Return me ONLY a json in the following format. Results should be an anonymized message and an array of all PII you have identified. It should be a valid json: {"anonymized_text": ANONYMIZED_TEXT_WITH_PII_REMOVED_REPLACE_PII_WITH_BLOCK, "analysis": [{"entity_type": YOU_DECIDE_THE_PII_TYPE,"analysis_explanation": WHY_IT_IS_PII, "score" : RATIO_OF_HOW_CONFIDENCE_YOU_ARE_IT_IS_PII, "start": POSITION_OF_THE_TEXT_IN_THE_SENTENCE_INCLUDING_SPACES_START,"end": POSITION_OF_THE_TEXT_IN_THE_SENTENCE_INCLUDING_SPACES_END},{"entity_type": YOU_DECIDE_THE_PII_TYPE,"analysis_explanation": WHY_IT_IS_PII, "score" : RATIO_OF_HOW_CONFIDENCE_YOU_ARE_IT_IS_PII, "start": POSITION_OF_THE_TEXT_IN_THE_SENTENCE_INCLUDING_SPACES_START,"end": POSITION_OF_THE_TEXT_IN_THE_SENTENCE_INCLUDING_SPACES_END}]}''',
     "abstract": '''Rewrite the text to abstract the protected information, without changing other parts. Do this even for long text. For example:
-        Input: <Text>I graduated from CMU, and I earn a six-figure salary. Today in the office...</Text>
-        <ProtectedInformation>CMU, Today</ProtectedInformation>
-        Output JSON: {"results": [{"protected": "CMU", "abstracted":"a prestigious university"}, {"protected": "Today", "abstracted":"Recently"}}] Please use "results" as the main key in the JSON object.'''
+        Input: <Text>I am Lewis Msasa, I graduated from UC Berkeley and I earn a lot of money</Text>
+        <ProtectedInformation>Lewis Msasa, UC Berkeley</ProtectedInformation>
+        Output JSON: {"anonymized_text": "I <PERSON>, I graduated from <INSTITUTION> and I earn a lot of money", "analysis": [{"entity_type": "<PERSON>", "analysis_explanation":"a name of a person", "score" : 0.9, "start":5, "end":15},{"entity_type": "<INSTITUTION>", "analysis_explanation":"a prestigious university", "score" : 0.9, "start":18, "end":28}]'''
 }
 
 
@@ -68,26 +68,18 @@ system_prompts_pdf = {
 - **Handle OCR artifacts** like `l` being mistaken for `1` or `0` being mistaken for `O` when detecting PII.
 - **Ensure JSON validity** in the output, even if no PII is found (return `"results": []` when no PII is detected).
 
-For the given message that a user sends to a chatbot, identify all the personally identifiable information using the above taxonomy only. 
-
-The `entity_type` should be selected from the ALL-CAPS categories above. The result should contain only the minimum necessary text that represents the PII.
-
-### **Expected JSON Format:**
-Return **only** a valid JSON object in the following format:
-```json
-{
-  "results": [
-    {
-      "entity_type": "YOU_DECIDE_THE_PII_TYPE",
-      "text": "PART_OF_MESSAGE_YOU_IDENTIFIED_AS_PII",
-      "position_start": POSITION_OF_THE_TEXT_IN_THE_SENTENCE_INCLUDING_SPACES_START,
-      "position_end": POSITION_OF_THE_TEXT_IN_THE_SENTENCE_INCLUDING_SPACES_END
-    }
-  ]
-}'''
+For the given message that a user sends to a chatbot, identify all the personally identifiable information using the above taxonomy only. The array of PII should be returned
+ Return me ONLY a json in the following format. Results should be an array of all PII you have identified. It should be a valid json:''',
+    "abstract": '''Get all the words that are PII as an array. Just give the specific words that are PII nothing more and they should be an array. For example:
+        Input: <Text>I am Lewis Msasa, I graduated from UC Berkeley and I earn a lot of money</Text>
+        <ProtectedInformation>Lewis Msasa, UC Berkeley</ProtectedInformation>
+        Output JSON: {"results": ["Lewis Msasa", "UC Berkeley"] }. The json object should have results as the parent
+'''
 }
 
 # Ollama options
 base_options = {"format": "json", "temperature": 0}
 
 UPLOAD_DIR = "temp"
+
+global_base_model = "phi3"
