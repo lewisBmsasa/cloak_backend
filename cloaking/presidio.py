@@ -92,7 +92,7 @@ class PresidioAnonymizer():
             return None
         
         return analysis_json
-    async def anonymize_pdf(self,filepath, output_path,fill=(0,0,0)):
+    async def anonymize_pdf(self,filepath, output_path,fill=(0,0,0), **kwargs):
         # Convert PDF to images
         
         images = convert_from_path(filepath)
@@ -122,7 +122,7 @@ class PresidioAnonymizer():
         
 
 
-    async def anonymize_text(self,text):
+    async def anonymize_text(self,text, **kwargs):
         results = self.analyzer.analyze(text=text, language=self.language)
         
         operators = {}

@@ -4,7 +4,7 @@ import time
 import logging
 import argparse
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Header
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 import ollama
@@ -18,7 +18,7 @@ from cloaking.presidio_requests import  anonymize_text_post,anonymize_pdf_result
 from cloaking.presidio import PresidioAnonymizer
 from cloaking.llm import LLMAnonymizer
 from utils.requests.message_request import MessageRequest
-from utils.constants.vars import  UPLOAD_DIR, global_base_model
+from utils.constants.vars import  UPLOAD_DIR, global_base_model, system_prompts
 
 """
 SETUP - brew install poppler
@@ -102,11 +102,22 @@ async def cloak(data: MessageRequest):
     input_text = data.message
     if not input_text:
         raise HTTPException(status_code=400, detail="No message provided")
-
+    system_prompt_detect = None
+    if data.system_prompts is not None:
+       
+        try:
+            #print(data.system_prompts.detect)
+            system_prompt_detect = data.system_prompts.detect
+            print(system_prompt_detect)
+        except json.JSONDecodeError as e:
+            print(e)
+            raise HTTPException(status_code=400, detail="Invalid JSON format in body")
     logging.info("Detect request received!")
     print("Detect request received!")
+   
     return StreamingResponse(
-        anonymizer_service.anonymize_text(input_text),
+     
+        anonymizer_service.anonymize_text(input_text, system_prompt = system_prompt_detect),
         media_type="application/json"
     )
 
@@ -125,6 +136,7 @@ async def cloak_pdf(file: UploadFile = File(...)):
     output_pdf_path = output_dir / f"redacted_{file.filename}"
 
     try:
+      
         result_path,_ = anonymizer_service.anonymize_pdf(input_pdf_path, output_pdf_path)
         if not result_path or not os.path.exists(result_path):
             raise HTTPException(status_code=500, detail="Failed to process PDF")
@@ -144,7 +156,7 @@ async def abstract(data: MessageRequest):
     logging.info("Abstract request received!")
 
     return StreamingResponse(
-        anonymizer_service.anonymize_text(input_text),
+        anonymizer_service.anonymize_text(input_text, system_prompt =system_prompts["abstract"]),
         media_type="application/json"
     )
 

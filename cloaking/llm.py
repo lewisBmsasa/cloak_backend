@@ -1,6 +1,7 @@
 import time
 import ollama
 import fitz
+import json
 import logging
 import re
 import unicodedata
@@ -16,14 +17,19 @@ class LLMAnonymizer():
         text = "\n".join([page.get_text() for page in doc])
         return text
 
-    def identify_sensitive_text(self,text):
+    def identify_sensitive_text(self,text,**kwargs):
         text = self.preprocess_text(text)
+        system_prompt = None
+        if 'system_prompt' in kwargs:
+            system_prompt = kwargs["system_prompt"]
+        if system_prompt is None:
+            system_prompt = system_prompts_pdf["detect"]
         response = ollama.chat(model="phi3", messages=[
         
-            {'role': 'system', 'content': system_prompts_pdf["detect"]},
-            {"role": "user", "content": text}
-            ])
-        return response["message"]["content"].split("\n") 
+            {'role': 'system', 'content': system_prompt},
+            {"role": "user", "content": text},
+            ],format="json")
+        return response["message"]["content"]
     def preprocess_text(self,text):
         """Clean and normalize text before feeding it into a PII detection model."""
         # Normalize Unicode (fixes encoding issues)
@@ -40,16 +46,19 @@ class LLMAnonymizer():
         text = re.sub(r"\b\d{10,16}\b", "[REDACTED_ACCOUNT]", text)  # Example: possible account numbers
 
         return text
-    def anonymize_pdf(self,pdf_path, output_path):
-        sensitive_response = self.identify_sensitive_text(self.extract_text_from_pdf(pdf_path))
-        print(sensitive_response)
-        sensitive_words = []
+    def anonymize_pdf(self,pdf_path, output_path,fill=(0,0,0), **kwargs):
+        sensitive_response = self.identify_sensitive_text(self.extract_text_from_pdf(pdf_path),**kwargs)
+        print("all ==>", sensitive_response)
+        sensitive_response = json.loads(sensitive_response)
+       
+        print("sensitive","====>",[entry["pii"] for entry in sensitive_response["analysis"]])
+        sensitive_words = [entry["pii"] for entry in sensitive_response["analysis"]]
         doc = fitz.open(pdf_path)
         for page in doc:
             for word in sensitive_words:
                 page.search_for(word)  
                 for rect in page.search_for(word):
-                    page.add_redact_annot(rect)  
+                    page.add_redact_annot(rect, fill=(0,0,0) )  
             page.apply_redactions()
         doc.save(output_path)
         return output_path, ""
@@ -73,7 +82,7 @@ class LLMAnonymizer():
         words = input_text.split()
         return [' '.join(words[i:i + chunk_size]) for i in range(0, len(words), chunk_size)]
  
-    async def anonymize_text(self, message):
+    async def anonymize_text(self, message, **kwargs):
         """Stream results from the Ollama model asynchronously."""
         start_time = time.time()
 
@@ -96,10 +105,15 @@ class LLMAnonymizer():
             #     f"3) Provide the final answer.\n"
             #     f"Show your reasoning clearly."
             # )
+            system_prompt = None
+            if 'system_prompt' in kwargs:
+                system_prompt = kwargs["system_prompt"]
+            if system_prompt is None:
+                system_prompt = system_prompts["detect"]
             async for chunk in self.async_chat_stream(
                 model=self.base_model,
                 messages=[
-                    {'role': 'system', 'content': system_prompts["detect"]},
+                    {'role': 'system', 'content': system_prompt},
                     {'role': 'user', 'content': prompt_chunk}
                 ],
                 format="json",
