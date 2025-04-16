@@ -1,8 +1,10 @@
 import subprocess
 import os
+import sys
 import time
 import logging
 import argparse
+import socket
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Header
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
@@ -24,7 +26,7 @@ from utils.constants.vars import  UPLOAD_DIR, global_base_model, system_prompts
 SETUP - brew install poppler
 brew install tesseract
 """
-
+process = None 
 parser = argparse.ArgumentParser(description="Local LLM Server")
 parser.add_argument("--port", type=int, default=8000, help="Port for server")
 parser.add_argument("--model", type=str, default=global_base_model, help="Model name to use")
@@ -32,7 +34,13 @@ args = parser.parse_args()
 global_base_model = args.model
 logging.basicConfig(filename='logs.txt', level=logging.INFO, format='%(asctime)s - %(message)s')
 # Set the model directory
-os.environ["OLLAMA_MODELS"] = os.path.abspath("./models")
+if hasattr(sys, '_MEIPASS'):  # PyInstaller packaged environment
+        base_path = sys._MEIPASS
+else:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+os.environ["OLLAMA_MODELS"] = os.path.join(base_path,"models")
+print("models path",os.environ["OLLAMA_MODELS"])
+logging.info(os.path.abspath("./models"))
 # Path to log file
 log_file_path = Path("logs.txt")
 
@@ -45,16 +53,91 @@ def getAnonymizerService(use_llm=False):
 
 anonymizer_service = getAnonymizerService(True)
 
+def is_port_in_use(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(('127.0.0.1', port)) == 0
 def start_ollama_server():
-    global process
+    
+   #Find bin directory
+    if hasattr(sys, '_MEIPASS'):  # PyInstaller packaged environment
+        base_path = sys._MEIPASS
+    else:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    bin_dir = os.path.join(base_path,"ollama","bin")
+    ollama_path = os.path.join(bin_dir, "ollama")
+    logging.debug(f"Ollama path: {ollama_path}")
+
+    # Verify ollama binary
+    if not os.path.exists(ollama_path):
+        logging.error(f"Ollama binary not found at {ollama_path}")
+        sys.exit(1)
+    if not os.access(ollama_path, os.X_OK):
+        logging.debug(f"Setting executable permissions for {ollama_path}")
+        os.chmod(ollama_path, 0o755)
+
+    # Prepare environment
+    env = os.environ.copy()
+    env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
+    logging.debug(f"Updated PATH: {env['PATH']}")
+
+    # Start Ollama server from bin directory
     try:
-        process = subprocess.Popen(["./bin/ollama", "serve"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        print("Starting Ollama server...")
-        print("Ollama server started in the background.")
-        time.sleep(3)  # Give Ollama time to start
+        # Free port 11434
+        if is_port_in_use(11434):
+            logging.warning("Port 11434 is in use, attempting to free it")
+            subprocess.run(["pkill", "-f", "ollama"], check=False)
+            time.sleep(1)
+
+        process = subprocess.Popen(
+            ["ollama", "serve"],
+            cwd=bin_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=env
+        )
+        logging.info("Starting Ollama server...")
+
+        # Monitor output asynchronously
+        def read_pipe(pipe, log_func):
+            while True:
+                line = pipe.readline()
+                if not line and process.poll() is not None:
+                    break
+                if line:
+                    log_func(line.strip())
+
+        import threading
+        threading.Thread(target=read_pipe, args=(process.stdout, logging.debug), daemon=True).start()
+        threading.Thread(target=read_pipe, args=(process.stderr, logging.error), daemon=True).start()
+
+        # Wait for server to be ready
+        max_attempts = 20
+        for attempt in range(max_attempts):
+            try:
+                import requests
+                response = requests.get("http://localhost:11434", timeout=1)
+                if response.status_code == 200:
+                    logging.info("Ollama server ready")
+                    break
+            except requests.ConnectionError:
+                if process.poll() is not None:
+                    stdout, stderr = process.communicate()
+                    logging.error(f"Ollama process exited. stdout: {stdout}, stderr: {stderr}")
+                    sys.exit(1)
+                time.sleep(1)
+        else:
+            logging.error("Ollama failed to start after 20 seconds")
+            process.terminate()
+            stdout, stderr = process.communicate()
+            logging.error(f"Ollama stdout: {stdout}")
+            logging.error(f"Ollama stderr: {stderr}")
+            sys.exit(1)
     except Exception as e:
-        logging.error(f"Failed to start Ollama server: {e}")
-        raise HTTPException(status_code=500, detail="Failed to start Ollama server")
+        logging.error(f"Ollama startup error: {e}")
+        if 'process' in locals():
+            process.terminate()
+        sys.exit(1)
 
            
 async def initialize_server(test_message: str):
@@ -70,6 +153,7 @@ async def initialize_server(test_message: str):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logging.info("App is starting...")
+    print("starting")
     try:
         start_ollama_server()
         await initialize_server("Hi, welcome to Cloak!")
@@ -80,7 +164,7 @@ async def lifespan(app: FastAPI):
             logging.info("Ollama server terminated.")
         logging.info("App is shutting down...")
 
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 
 
 
@@ -120,9 +204,27 @@ async def cloak(data: MessageRequest):
         anonymizer_service.anonymize_text(input_text, system_prompt = system_prompt_detect),
         media_type="application/json"
     )
-
 @app.post("/cloak_pdf")
 async def cloak_pdf(file: UploadFile = File(...)):
+    """Endpoint to anonymize PDF files."""
+    if not file.filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+    logging.info(file.filename)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
+        temp_pdf.write(await file.read())
+        input_pdf_path = temp_pdf.name
+
+    input_text = anonymizer_service.get_pdf_text(input_pdf_path)
+    print("INPUT", input_text)
+    logging.info("Abstract request received!")
+
+    return StreamingResponse(
+        anonymizer_service.anonymize_pdf(input_pdf_path,"",fill=(0,0,0)),
+        media_type="application/json"
+    )
+
+@app.post("/redact_pdf")
+async def detact_pdf(file: UploadFile = File(...)):
     """Endpoint to anonymize PDF files."""
     if not file.filename.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
@@ -159,7 +261,24 @@ async def abstract(data: MessageRequest):
         anonymizer_service.anonymize_text(input_text, system_prompt =system_prompts["abstract"]),
         media_type="application/json"
     )
+@app.post("/abstract_pdf")
+async def abstract(file: UploadFile = File(...)):
+    """Endpoint to abstract detected PII in text."""
+    if not file.filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+    logging.info(file.filename)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
+        temp_pdf.write(await file.read())
+        input_pdf_path = temp_pdf.name
 
+    input_text = anonymizer_service.get_pdf_text(input_pdf_path)
+    print("INPUT", input_text)
+    logging.info("Abstract request received!")
+
+    return StreamingResponse(
+        anonymizer_service.anonymize_text(input_text, system_prompt =system_prompts["abstract"]),
+        media_type="application/json"
+    )
 
 # Background initialization
 #threading.Thread(target=run_async_in_thread, daemon=True).start()

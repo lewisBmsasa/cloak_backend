@@ -4,6 +4,7 @@ from PIL import Image
 from pdf2image import convert_from_path
 from PIL import Image
 from faker import Faker
+import fitz
 import os
 import base64
 import json
@@ -70,9 +71,6 @@ class PresidioAnonymizer():
     def analyze_image_and_show_results(self,image):
     
         extracted_text = pytesseract.image_to_string(image)
-        print("Extracted Text:")
-        print(extracted_text)
-        print("\nAnalyzed Results (Sensitive Information to be Redacted):")
         analysis_results = self.analyzer.analyze(text=extracted_text, language="en")
         
         # Display the detected entities
@@ -92,39 +90,57 @@ class PresidioAnonymizer():
             return None
         
         return analysis_json
-    async def anonymize_pdf(self,filepath, output_path,fill=(0,0,0), **kwargs):
-        # Convert PDF to images
+    # async def anonymize_pdf(self,filepath, output_path,fill=(0,0,0), **kwargs):
+    #     # Convert PDF to images
         
-        images = convert_from_path(filepath)
+    #     images = convert_from_path(filepath)
         
-        redacted_images = []
-        analyzed_results = []
-        for i, image in enumerate(images):
-            analysis = self.analyze_image_and_show_results(image)
-            redacted_image = self.image_engine.redact(image,fill=fill)
-            redacted_images.append(redacted_image)
-            if analysis:
-                analyzed_results.append(analysis)
+    #     redacted_images = []
+    #     analyzed_results = []
+    #     for i, image in enumerate(images):
+    #         analysis = self.analyze_image_and_show_results(image)
+    #         redacted_image = self.image_engine.redact(image,fill=fill)
+    #         redacted_images.append(redacted_image)
+    #         if analysis:
+    #             analyzed_results.append(analysis)
         
-        if redacted_images:
-            try:
-                #os.makedirs(os.path.dirname(output_path), exist_ok=True)
-                redacted_images[0].save(
-                        output_path,
-                        save_all=True,
-                        append_images=redacted_images[1:] if len(redacted_images) > 1 else [],
-                        format="PDF"
-                    )
-                print(f"Successfully saved to {output_path}")
-            except Exception as e:
-                print("no file output",e)
-        return output_path, analyzed_results
+    #     if redacted_images:
+    #         try:
+    #             #os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    #             redacted_images[0].save(
+    #                     output_path,
+    #                     save_all=True,
+    #                     append_images=redacted_images[1:] if len(redacted_images) > 1 else [],
+    #                     format="PDF"
+    #                 )
+    #             print(f"Successfully saved to {output_path}")
+    #         except Exception as e:
+    #             print("no file output",e)
+    #     return output_path, analyzed_results
         
 
-
+    def anonymize_pdf(self,pdf_path, output_path,fill=(0,0,0), **kwargs):
+       
+        doc = fitz.open(pdf_path)
+        for page in doc:
+            text = page.get_text()
+            results = self.analyzer.analyze(text=text, language=self.language)
+            for result in results:
+                entity_text = text[result.start:result.end]
+                for rect in page.search_for(entity_text):
+                    page.add_redact_annot(rect, fill=fill)  
+            page.apply_redactions()
+        doc.save(output_path)
+        return output_path, ""
+ 
+    
+    def get_pdf_text(self,pdf_path, **kwargs):
+        doc = fitz.open(pdf_path)
+        text = "\n".join([page.get_text() for page in doc])
+        return text
     async def anonymize_text(self,text, **kwargs):
         results = self.analyzer.analyze(text=text, language=self.language)
-        
+       
         operators = {}
         if False:
             for result in results:
@@ -141,6 +157,7 @@ class PresidioAnonymizer():
             analyzer_results=results,
             operators=operators
         )
+
         yield json.dumps({ "anonymized_text": anonymized_text.text, "analysis": [result.to_dict() for result in results]})
 
 
