@@ -5,10 +5,12 @@ import time
 import logging
 import argparse
 import socket
+from collections import defaultdict
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Header
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Header
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from config import settings
 import ollama
 import tempfile
 import json
@@ -19,8 +21,8 @@ from pathlib import Path
 from cloaking.presidio_requests import  anonymize_text_post,anonymize_pdf_results
 from cloaking.presidio import PresidioAnonymizer
 from cloaking.llm import LLMAnonymizer
-from utils.requests.message_request import MessageRequest
-from utils.constants.vars import  UPLOAD_DIR, global_base_model, system_prompts
+from utils.requests.message_request import MessageRequest,WordListRequest
+from utils.constants.vars import  UPLOAD_DIR, global_base_model
 
 """
 SETUP - brew install poppler
@@ -214,17 +216,16 @@ async def cloak_pdf(file: UploadFile = File(...)):
         temp_pdf.write(await file.read())
         input_pdf_path = temp_pdf.name
 
-    input_text = anonymizer_service.get_pdf_text(input_pdf_path)
-    print("INPUT", input_text)
-    logging.info("Abstract request received!")
-
+    # input_text = anonymizer_service.get_pdf_text(input_pdf_path)
+    # print("INPUT", input_text)
+   
     return StreamingResponse(
         anonymizer_service.anonymize_pdf(input_pdf_path,"",fill=(0,0,0)),
         media_type="application/json"
     )
 
 @app.post("/redact_pdf")
-async def detact_pdf(file: UploadFile = File(...)):
+async def redact_pdf(file: UploadFile = File(...),words_request: str = Form(...)):
     """Endpoint to anonymize PDF files."""
     if not file.filename.endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
@@ -232,6 +233,10 @@ async def detact_pdf(file: UploadFile = File(...)):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
         temp_pdf.write(await file.read())
         input_pdf_path = temp_pdf.name
+    try:
+        word_data = WordListRequest.parse_raw(words_request)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid word list: {e}")
 
     output_dir = Path("redacted_files")
     output_dir.mkdir(exist_ok=True)
@@ -239,7 +244,36 @@ async def detact_pdf(file: UploadFile = File(...)):
 
     try:
       
-        result_path,_ = anonymizer_service.anonymize_pdf(input_pdf_path, output_pdf_path)
+        result_path,_ = anonymizer_service.redact_pdf(input_pdf_path, output_pdf_path, word_data.words)
+        if not result_path or not os.path.exists(result_path):
+            raise HTTPException(status_code=500, detail="Failed to process PDF")
+        
+        return FileResponse(result_path, filename=f"redacted_{file.filename}", media_type="application/pdf")
+   
+    finally:
+        os.remove(input_pdf_path)
+
+@app.post("/underline_pdf")
+async def underline_pdf(file: UploadFile = File(...), words_request: str = Form(...) ):
+    """Endpoint to anonymize PDF files."""
+    if not file.filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+    logging.info(file.filename)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_pdf:
+        temp_pdf.write(await file.read())
+        input_pdf_path = temp_pdf.name
+    try:
+        word_data = WordListRequest.parse_raw(words_request)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid word list: {e}")
+
+    output_dir = Path("redacted_files")
+    output_dir.mkdir(exist_ok=True)
+    output_pdf_path = output_dir / f"underlined_{file.filename}"
+
+    try:
+      
+        result_path,_ = anonymizer_service.underline_pdf(input_pdf_path,output_pdf_path,word_data.words)
         if not result_path or not os.path.exists(result_path):
             raise HTTPException(status_code=500, detail="Failed to process PDF")
         
@@ -258,7 +292,7 @@ async def abstract(data: MessageRequest):
     logging.info("Abstract request received!")
 
     return StreamingResponse(
-        anonymizer_service.anonymize_text(input_text, system_prompt =system_prompts["abstract"]),
+        anonymizer_service.anonymize_text(input_text, system_prompt =settings.system_prompts["abstract"]),
         media_type="application/json"
     )
 @app.post("/abstract_pdf")
@@ -276,7 +310,7 @@ async def abstract(file: UploadFile = File(...)):
     logging.info("Abstract request received!")
 
     return StreamingResponse(
-        anonymizer_service.anonymize_text(input_text, system_prompt =system_prompts["abstract"]),
+        anonymizer_service.anonymize_text(input_text, system_prompt =settings.system_prompts["abstract"]),
         media_type="application/json"
     )
 

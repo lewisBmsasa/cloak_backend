@@ -12,4 +12,5 @@ class MessageRequest(BaseModel):
     system_prompts: SystemPrompts = None
 
 
-
+class WordListRequest(BaseModel):
+    words: Dict[str, List[int]] 

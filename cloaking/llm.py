@@ -6,7 +6,7 @@ import logging
 import re
 import unicodedata
 from utils.constants.vars import  base_options, system_prompts, system_prompts_pdf
-
+from config import settings
 
 class LLMAnonymizer():
     def __init__(self, base_model, chunking=True):
@@ -23,7 +23,7 @@ class LLMAnonymizer():
         if 'system_prompt' in kwargs:
             system_prompt = kwargs["system_prompt"]
         if system_prompt is None:
-            system_prompt = system_prompts_pdf["detect"]
+            system_prompt = settings.system_prompts["detect"]
         response = ollama.chat(model=self.base_model, messages=[
         
             {'role': 'system', 'content': system_prompt},
@@ -48,48 +48,70 @@ class LLMAnonymizer():
         return text
     def get_pdf_text(self,pdf_path):
         return self.extract_text_from_pdf(pdf_path)
-    # def anonymize_pdf(self,pdf_path, output_path,fill=(0,0,0), **kwargs):
-    #     sensitive_response = self.identify_sensitive_text(self.extract_text_from_pdf(pdf_path),**kwargs)
-    #     print("all ==>", sensitive_response)
-    #     sensitive_response = json.loads(sensitive_response)
-       
-    #     print("sensitive","====>",[entry["pii"] for entry in sensitive_response["analysis"]])
-    #     sensitive_words = [entry["pii"] for entry in sensitive_response["analysis"]]
-    #     doc = fitz.open(pdf_path)
-    #     for page in doc:
-    #         for word in sensitive_words:
-    #             page.search_for(word)  
-    #             for rect in page.search_for(word):
-    #                 page.add_redact_annot(rect, fill=fill)  
-    #         page.apply_redactions()
-    #     doc.save(output_path)
-    #     return output_path, ""
+    def redact_pdf(self,pdf_path, output_path, sensitive_words,fill=(0,0,0), **kwargs):
+        doc = fitz.open(pdf_path)
+        for page in doc:
+            for word, occurrences in sensitive_words.items():
+                matches = page.search_for(word) 
+                for i in occurrences:
+                    if i < len(matches):
+                        rect = matches[i]
+                        page.add_redact_annot(rect, fill=fill)  
+            page.apply_redactions()
+        doc.save(output_path)
+        return output_path, ""
+    def underline_pdf(self, pdf_path, output_path, sensitive_words, fill=(1, 0, 0), **kwargs):
+        doc = fitz.open(pdf_path)
+        
+        for page in doc:
+            for word, occurrences in sensitive_words.items():
+                matches = page.search_for(word)
+                for i in occurrences:
+                    if i < len(matches):
+                        rect = matches[i]
+                        annot = page.add_underline_annot(rect)
+                        annot.set_colors(stroke=fill)
+                        annot.update()
+
+        doc.save(output_path)
+        return output_path, ""
     async def anonymize_pdf(self,pdf_path, output_path,fill=(0,0,0), **kwargs):
         
         start_time = time.time()
         doc = fitz.open(pdf_path)
+        if 'chunk_size' in kwargs:
+            chunk_size = kwargs["chunk_size"]
+        else:
+            chunk_size = 200
         for page in doc:
             prompt_chunk = page.get_text()
             print("Processing chunk: ", prompt_chunk)
             logging.info(f"Processing chunk: {prompt_chunk}")
-            system_prompt = None
-            if 'system_prompt' in kwargs:
-                system_prompt = kwargs["system_prompt"]
-            if system_prompt is None:
-                system_prompt = system_prompts["detect"]
-            async for chunk in self.async_chat_stream(
-                model=self.base_model,
-                messages=[
-                    {'role': 'system', 'content': system_prompt},
-                    {'role': 'user', 'content': prompt_chunk}
-                ],
-                format="json",
-                stream=True,
-                options=base_options
-            ):
-                log_message = f"Result chunk: {chunk} (Time: {time.time() - start_time:.2f}s)"
-                logging.info(f"Result chunk: {chunk} (Time: {time.time() - start_time:.2f}s)")
-                yield chunk
+            words = prompt_chunk.split()
+            chunks = [words[i:i + chunk_size] for i in range(0, len(words), chunk_size)]
+            chunks = [' '.join(chunk) for chunk in chunks]
+         
+            for chunked in chunks:
+                print(chunked)
+                system_prompt = None
+                if 'system_prompt' in kwargs:
+                    system_prompt = kwargs["system_prompt"]
+                if system_prompt is None:
+                    system_prompt = settings.system_prompts["detect"]
+            
+                async for chunk in self.async_chat_stream(
+                    model=self.base_model,
+                    messages=[
+                        {'role': 'system', 'content': system_prompt},
+                        {'role': 'user', 'content': chunked}
+                    ],
+                    format="json",
+                    stream=True,
+                    options=base_options
+                ):
+                    log_message = f"Result chunk: {chunk} (Time: {time.time() - start_time:.2f}s)"
+                    logging.info(f"Result chunk: {chunk} (Time: {time.time() - start_time:.2f}s)")
+                    yield chunk
     
     async def async_chat_stream(self,model, messages, **kwargs):
             try:
@@ -120,26 +142,38 @@ class LLMAnonymizer():
             prompt_chunks = [message]
         results = []
         print("chuuuuunkkkks", prompt_chunks)
+
+        if 'chunk_size' in kwargs:
+            chunk_size = kwargs["chunk_size"]
+        else:
+            chunk_size = 200
+        system_prompt = None
+        if 'system_prompt' in kwargs:
+            system_prompt = kwargs["system_prompt"]
+        if system_prompt is None:
+            system_prompt = settings.system_prompts["detect"]
         
         for prompt_chunk in prompt_chunks:
             print("Processing chunk: ", prompt_chunk)
             logging.info(f"Processing chunk: {prompt_chunk}")
-            system_prompt = None
-            if 'system_prompt' in kwargs:
-                system_prompt = kwargs["system_prompt"]
-            if system_prompt is None:
-                system_prompt = system_prompts["detect"]
-            async for chunk in self.async_chat_stream(
-                model=self.base_model,
-                messages=[
-                    {'role': 'system', 'content': system_prompt},
-                    {'role': 'user', 'content': prompt_chunk}
-                ],
-                format="json",
-                stream=True,
-                options=base_options
-            ):
-                log_message = f"Result chunk: {chunk} (Time: {time.time() - start_time:.2f}s)"
-                logging.info(f"Result chunk: {chunk} (Time: {time.time() - start_time:.2f}s)")
-                yield chunk
+
+            words = prompt_chunk.split()
+            chunks = [words[i:i + chunk_size] for i in range(0, len(words), chunk_size)]
+            chunks = [' '.join(chunk) for chunk in chunks]
+         
+            for chunked in chunks:
+          
+                async for chunk in self.async_chat_stream(
+                    model=self.base_model,
+                    messages=[
+                        {'role': 'system', 'content': system_prompt},
+                        {'role': 'user', 'content': chunked}
+                    ],
+                    format="json",
+                    stream=True,
+                    options=base_options
+                ):
+                    log_message = f"Result chunk: {chunk} (Time: {time.time() - start_time:.2f}s)"
+                    logging.info(f"Result chunk: {chunk} (Time: {time.time() - start_time:.2f}s)")
+                    yield chunk
            

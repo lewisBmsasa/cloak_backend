@@ -118,7 +118,10 @@ class PresidioAnonymizer():
     #             print("no file output",e)
     #     return output_path, analyzed_results
         
-
+    def redact_pdf(self,pdf_path, output_path, sensitive_words,fill=(0,0,0), **kwargs):
+        pass
+    def underline_pdf(self,pdf_path, output_path, sensitive_words,fill=(0,0,0), **kwargs):
+        pass
     def anonymize_pdf(self,pdf_path, output_path,fill=(0,0,0), **kwargs):
        
         doc = fitz.open(pdf_path)

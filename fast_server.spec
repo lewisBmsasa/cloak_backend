@@ -5,7 +5,7 @@ a = Analysis(
     ['fast_server.py'],
     pathex=[],
     binaries=[('./ollama', 'bin')],
-    datas=[('./models', 'models'), ('/opt/anaconda3/envs/privacy/lib/python3.10/site-packages/ollama', 'ollama'), ('/opt/anaconda3/envs/privacy/lib/python3.10/site-packages/spacy', 'spacy'), ('/opt/anaconda3/envs/privacy/lib/python3.10/site-packages/presidio_analyzer', 'presidio_analyzer'), ('/opt/anaconda3/envs/privacy/lib/python3.10/site-packages/presidio_anonymizer', 'presidio_anonymizer'), ('/opt/anaconda3/envs/privacy/lib/python3.10/site-packages/presidio_structured', 'presidio_structured'), ('/opt/anaconda3/envs/privacy/lib/python3.10/site-packages/presidio_image_redactor', 'presidio_image_redactor'), ('/opt/anaconda3/envs/privacy/lib/python3.10/site-packages/en_core_web_sm', 'en_core_web_sm')],
+    datas=[('./models', 'models'), ('./prompts', 'prompts'), ('/opt/anaconda3/envs/privacy/lib/python3.10/site-packages/ollama', 'ollama'), ('/opt/anaconda3/envs/privacy/lib/python3.10/site-packages/spacy', 'spacy'), ('/opt/anaconda3/envs/privacy/lib/python3.10/site-packages/presidio_analyzer', 'presidio_analyzer'), ('/opt/anaconda3/envs/privacy/lib/python3.10/site-packages/presidio_anonymizer', 'presidio_anonymizer'), ('/opt/anaconda3/envs/privacy/lib/python3.10/site-packages/presidio_structured', 'presidio_structured'), ('/opt/anaconda3/envs/privacy/lib/python3.10/site-packages/presidio_image_redactor', 'presidio_image_redactor'), ('/opt/anaconda3/envs/privacy/lib/python3.10/site-packages/en_core_web_sm', 'en_core_web_sm')],
     hiddenimports=['ollama', 'ollama._client', 'spacy', 'presidio_analyzer', 'spacy.lang.en', 'spacy.pipeline', 'en_core_web_sm'],
     hookspath=[],
     hooksconfig={},
